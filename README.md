@@ -5,6 +5,6 @@ The project is titled "Formula 1 2024 - Spanish Grand Prix - Results and perform
 The file .html contains the slides of the discussion of the project. <br>
 The file .rmd contains the R Markdown with code and prose used to generate the slides. <br>
 The file .r contains the R script used to create this project. <br>
-The file .css contains the .css file used to product the .html file <br>
+The file .css contains the .css file used to product the .html file. <br>
 The folder "Datasets" contains the datasets used in this project. <br>
 
