@@ -1,0 +1,663 @@
+---
+title: "Formula 1 2024 <br> Spanish Grand Prix"
+subtitle: "Results and performance analysis"
+author: "Francesco Zigotti"
+date: "12-09-24"
+output: 
+  ioslides_presentation:
+    css: slides.css
+    widescreen: yes
+    incremental: yes
+
+editor_options: 
+  chunk_output_type: inline
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, fig.align='center', message=FALSE, warning=FALSE)
+
+library(tidyverse)
+library(gganimate)
+
+# Datasets used for the first part of the project
+race_results <- read_csv("./Datasets/F1_2024_Results/Formula1_2024season_raceResults.csv")
+sprint_results <- read_csv("./Datasets/F1_2024_Results/Formula1_2024season_sprintResults.csv")
+quali_results <- read_csv("./Datasets/F1_2024_Results/Formula1_2024season_qualifyingResults.csv")
+
+# Datasets used for the last part of the project
+races <- read_csv("./Datasets/F1_2024_Spanish_race_data/races.csv")
+lap_times <- read_csv("./Datasets/F1_2024_Spanish_race_data/lap_times.csv")
+drivers <- read_csv("./Datasets/F1_2024_Spanish_race_data/drivers.csv")
+
+# Official Formula 1 teams colors from https://www.reddit.com/r/formula1/comments/1avhmjb/f1_2024_hex_codes/
+teams_cols <- c("Alpine Renault" = "#FF87BC", "Aston Martin Aramco Mercedes" = "#229971", "Ferrari" = "#E8002D",
+          "Haas Ferrari" = "#B6BABD", "Kick Sauber Ferrari" = "#52E252", "McLaren Mercedes" = "#FF8000",
+          "Mercedes" = "#27F4D2", "RB Honda RBPT" = "#6692FF", "Red Bull Racing Honda RBPT" = "#3671C6",
+          "Williams Mercedes" = "#64C4FF")
+
+drivers_cols <- c("Charles Leclerc" = "#E8002D", "Lando Norris" = "#FF8000", "George Russell" = "#27F4D2", 
+          "Max Verstappen" = "#3671C6")
+
+# Removing data from GPs that take place after the Spanish Grand Prix
+race_results <- race_results |>
+  filter(Track != "Spain" & Track != "Austria" & Track != "Great Britain" & Track != "Hungary" & Track != "Belgium")
+
+sprint_results <- sprint_results |>
+  filter(Track != "Austria")
+
+# Let's create a dataframe that tracks the points gained during the season
+race_points <- race_results |>
+  select(Driver, Team, Points) |>
+  rename(Race_points = Points)
+
+sprint_points <- sprint_results |>
+  select(Driver, Team, Points) |>
+  rename(Sprint_points = Points)
+
+# Let's determine a Grand Prix order to the results (based on event dates)
+ordered_race_results <- race_results |>
+  mutate(GP_num = case_when(Track == "Bahrain" ~ 1,
+                            Track == "Saudi Arabia" ~ 2,
+                            Track == "Australia" ~ 3,
+                            Track == "Japan" ~ 4,
+                            Track == "China" ~ 5,
+                            Track == "Miami" ~ 6,
+                            Track == "Emilia Romagna" ~ 7,
+                            Track == "Monaco" ~ 8,
+                            Track == "Canada" ~ 9,
+                            Track == "Spain" ~ 10,
+                            Track == "Austria" ~ 11,
+                            Track == "Great Britain" ~ 12,
+                            Track == "Hungary" ~ 13,
+                            Track == "Belgium" ~ 14))
+
+ordered_sprint_results <- sprint_results |>
+  mutate(GP_num = case_when(Track == "Bahrain" ~ 1,
+                            Track == "Saudi Arabia" ~ 2,
+                            Track == "Australia" ~ 3,
+                            Track == "Japan" ~ 4,
+                            Track == "China" ~ 5,
+                            Track == "Miami" ~ 6,
+                            Track == "Emilia Romagna" ~ 7,
+                            Track == "Monaco" ~ 8,
+                            Track == "Canada" ~ 9,
+                            Track == "Spain" ~ 10,
+                            Track == "Austria" ~ 11,
+                            Track == "Great Britain" ~ 12,
+                            Track == "Hungary" ~ 13,
+                            Track == "Belgium" ~ 14))
+
+# Select the data OF the Spain Grand Prix for Qualifying analysis
+q3_results <- quali_results |>
+  filter(Track == "Spain" & (!is.na(quali_results$Q3)) & quali_results$Q3 != "DNF") |>
+  select(Driver, Team, Q3)
+
+# Add drivers name abbreviation for qualifying analysis
+q3_results <- q3_results |>
+  mutate(Driver = case_when(Driver == "Lando Norris" ~ "NOR", 
+                            Driver == "Max Verstappen" ~ "VER",
+                            Driver == "Lewis Hamilton" ~ "HAM",
+                            Driver == "George Russell" ~ "RUS",
+                            Driver == "Charles Leclerc" ~ "LEC",
+                            Driver == "Carlos Sainz" ~ "SAI",
+                            Driver == "Pierre Gasly" ~ "GAS",
+                            Driver == "Sergio Perez" ~ "PER",
+                            Driver == "Esteban Ocon" ~ "OCO"))
+
+# Now let's operate some trasformations about the 2nd dataset
+
+# Select the 2024 Spanish Grand Prix from the races list dataset
+spanish_grand_prix <- races |>
+  filter(year == 2024 & name == "Spanish Grand Prix") |>
+  select(raceId)
+
+# Retrieve the raceId corresponding to the 2024 Spanish Grand Prix
+target_race_id <- spanish_grand_prix$raceId
+
+# Obtaining the 2024 spanish race lap times from the race lap times dataset
+race_lap_times <- lap_times |>
+  filter(raceId == target_race_id)
+
+# Let's transform the drivers list in order to mantain the same data format of the results datasets
+drivers <- drivers |>
+  mutate(driver = paste(forename, surname, sep = " ")) |>
+  select(driverId, driver)
+
+# Removing unused columns
+race_lap_times <- race_lap_times |>
+  select(driverId, lap, milliseconds)
+
+# Join the race lap times with drivers
+race_lap_times <- race_lap_times %>%
+  inner_join(drivers)
+
+# Adding "team" attribute to the dataframe
+race_lap_times <- race_lap_times |>
+  select(driver, lap, milliseconds) |>
+  mutate(team = case_when(driver == "Max Verstappen" ~ "Red Bull Racing Honda RBPT",
+                          driver == "Sergio Pérez" ~ "Red Bull Racing Honda RBPT",
+                          driver == "Lewis Hamilton" ~ "Mercedes",
+                          driver == "George Russell" ~ "Mercedes",
+                          driver == "Charles Leclerc" ~ "Ferrari",
+                          driver == "Carlos Sainz" ~ "Ferrari",
+                          driver == "Lando Norris" ~ "McLaren Mercedes",
+                          driver == "Oscar Piastri" ~ "McLaren Mercedes",
+                          driver == "Fernando Alonso" ~ "Aston Martin Aramco Mercedes",
+                          driver == "Lance Stroll" ~ "Aston Martin Aramco Mercedes",
+                          driver == "Pierre Gasly" ~ "Alpine Renault",
+                          driver == "Esteban Ocon" ~ "Alpine Renault",
+                          driver == "Yuki Tsunoda" ~ "RB Honda RBPT",
+                          driver == "Daniel Ricciardo" ~ "RB Honda RBPT",
+                          driver == "Nico Hülkenberg" ~ "Haas Ferrari",
+                          driver == "Kevin Magnussen" ~ "Haas Ferrari",
+                          driver == "Alexander Albon" ~ "Williams Mercedes",
+                          driver == "Logan Sargeant" ~ "Williams Mercedes",
+                          driver == "Valtteri Bottas" ~ "Kick Sauber Ferrari",
+                          driver == "Guanyu Zhou" ~ "Kick Sauber Ferrari"))
+
+```
+
+## Introduction
+
+This data science project concerns the Formula 1 2024 season, focusing in particular on the **Spanish Grand Prix**. The **Spanish Grand Prix** was held across the weekend of 21-23 June 2024 at the **Circuit de Barcelona-Catalunya** in **Montmeló**, Spain. It was the 10th round of the F1 2024 World Championship.
+
+Historically, this Grand Prix is often an important event for the engineering developments of the cars, exploiting the features of the track that are very helpful to understand aerodynamics upgrades. For this reason, this weekend could be a crucial turning point for the remainder part of the season.
+
+The project consists of two parts: the first part shows the background of the **Spanish Grand Prix**, going into the details of the competition results achieved before this event. The second part analyzes the on-track performances of the Spanish race, highlighting the hierarchies of the contenders.
+
+## Datasets
+
+This project uses two distinct datasets:
+
+1. [Formula 1 2024 - Results](https://github.com/toUpperCase78/formula1-datasets)
+2. [Formula 1 2024 - Spanish race data](https://www.kaggle.com/datasets/rohanrao/formula-1-world-championship-1950-2020)
+
+The first one contains the data of the final classifications of the previous Grand Prix. The second one contains the performance data of the **Spanish Grand Prix**, storing the lap times of the drivers during the race session.
+
+# Part 1 <br> Overview of the previous results
+
+## Drivers Standings
+
+Let's show the drivers standings before the **Spanish Grand Prix**
+
+```{r drivers_standings, out.width="80%"}
+
+# Summing up the points based on drivers 
+race_drivers_standings <- race_points |>
+  group_by(Driver, Team) |>
+  summarize(
+    Race_points = sum(Race_points),
+    .groups = "drop"
+  )
+
+sprint_drivers_standings <- sprint_points |>
+  group_by(Driver) |>
+  summarize(
+    Sprint_points = sum(Sprint_points)
+  )
+
+# In Formula 1 there are two types of races: classical races and sprint races (in a less number). Sprint races are long 1/3 of a classical race length and they award a lower number of points. So it's needed to compute the sum of the points awarded from both race types.
+drivers_standings <- race_drivers_standings %>%
+  full_join(sprint_drivers_standings)
+
+# There is a driver that raced in a classical race but not in any sprint race, so it's needed to set at zero the points awarded in sprint races instead of NA
+drivers_standings[is.na(drivers_standings)] <- 0
+
+# Summing up the overall points
+drivers_standings <-  drivers_standings |>
+  mutate(
+    Points = Race_points + Sprint_points
+  )
+
+# Plotting the Drivers Standings
+ggplot(
+  drivers_standings,
+  aes(x = Points, y = reorder(Driver, Points), fill = Team)
+) +
+  geom_bar(stat = "Identity", color = "black") +
+  geom_text(aes(label = Points), nudge_x = 10) +
+  scale_fill_manual(values = teams_cols) +
+  labs(
+    title = "Drivers standings",
+    x = "Points", y = "Driver"
+  )
+```
+
+## Constructors Standings 
+
+Let's show the constructors standings before the **Spanish Grand Prix**
+
+```{r constructors_standings, out.width="80%"}
+
+# Summing up the points based on drivers 
+race_constructors_standings <- race_points |>
+  group_by(Team) |>
+  summarize(
+    Race_points = sum(Race_points)
+  )
+
+sprint_constructors_standings <- sprint_points |>
+  group_by(Team) |>
+  summarize(
+    Sprint_points = sum(Sprint_points)
+  )
+
+# Joining classic races points and sprint races points
+constructors_standings <- race_constructors_standings %>%
+  full_join(sprint_constructors_standings)
+
+# Summing up the overall points
+constructors_standings <-  constructors_standings |>
+  mutate(
+    Points = Race_points + Sprint_points
+  )
+
+# Plotting the Constructors Standings
+ggplot(
+  constructors_standings,
+  aes(x = Points, y = reorder(Team, Points))
+) +
+  geom_bar(stat = "Identity", fill = teams_cols, color = "black") +
+  geom_text(aes(label = Points), nudge_x = 10) +
+  labs(
+    title = "Constructors standings",
+    x = "Points", y = "Team"
+  )
+```
+
+## Performance classes
+
+Using these standings, the drivers are divided into performance classes using hierarchical clustering
+
+```{r driver_performance classes, out.width="75%"}
+
+drivers_rank <- drivers_standings |>
+  select(Driver, Points)
+
+# Group drivers into performance classes 
+drivers_rank = arrange(drivers_rank, desc(Points))
+D = dist(drivers_rank$Points)
+cc = hclust(D, method = "average")
+
+# Visualize the driver ranking highlighting the performance classes with different colors
+clusters = cutree(cc, k = 6)
+drivers_rank = mutate(drivers_rank, cluster = as.factor(clusters))
+ggplot(drivers_rank, aes(x = 1, y = Points, color = cluster)) +
+  geom_text(aes(label = Driver), show.legend = FALSE) + 
+  labs(y = "Rating") +
+  theme_minimal() + 
+  theme(axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank())
+```
+
+This computation is repeated also for constructors
+
+```{r constructors_performance classes, out.width="75%"}
+
+constructors_rank <- constructors_standings |>
+  select(Team, Points)
+
+# Group teams into performance classes 
+constructors_rank = arrange(constructors_rank, desc(Points))
+D = dist(constructors_rank$Points)
+cc = hclust(D, method = "average")
+
+## Visualize the team ranking highlighting the performance classes with different colors
+clusters = cutree(cc, k = 4)
+constructors_rank = mutate(constructors_rank, cluster = as.factor(clusters))
+ggplot(constructors_rank, aes(x = 1, y = Points, color = cluster)) +
+  geom_text(aes(label = Team), show.legend = FALSE) + 
+  labs(y = "Rating") +
+  theme_minimal() + 
+  theme(axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank())
+```
+
+## Title contenders drivers Trend Analysis
+
+The previous plots show the overall results in a fixed point (the situation immediately before the **Spanish Grand Prix**). But it's also interesting analyze how they changed during the ongoing season
+
+```{r drivers_title_contenders_trend, out.width="70%"}
+
+# Using the ordered results for this block
+ordered_race_results <- ordered_race_results|>
+  select(GP_num, Driver, Team, Points)
+
+ordered_sprint_results <- ordered_sprint_results|>
+  select(GP_num, Driver, Team, Points)
+
+ordered_race_results <-  rename(ordered_race_results, Race_points = Points)
+
+ordered_sprint_results <-  rename(ordered_sprint_results, Sprint_points = Points)
+
+# Join the classical races and the sprint races results
+ordered_results <- ordered_race_results %>%
+  full_join(ordered_sprint_results)
+
+ordered_results[is.na(ordered_results)] <- 0
+
+# Summing up the overall points
+drivers_points <-  ordered_results |>
+  mutate(
+    Points = Race_points + Sprint_points
+  ) |>
+  select(GP_num, Driver, Team, Points)
+
+# In this section we consider only the points of the four "top teams" "number one" drivers (drivers that have more points compared to his teammate)
+drivers_title_contenders_points <- drivers_points |>
+  filter(Driver == "Max Verstappen" | Driver == "Charles Leclerc" | Driver == "Lando Norris" | Driver == "George Russell")
+
+# Compute the cumulative points of target drivers
+cumulative_points_ver <- drivers_title_contenders_points |>
+  filter(Driver == "Max Verstappen") |>
+  mutate(Cumulative_points = cumsum(Points))
+
+cumulative_points_lec <- drivers_title_contenders_points |>
+  filter(Driver == "Charles Leclerc") |>
+  mutate(Cumulative_points = cumsum(Points))
+
+cumulative_points_nor <- drivers_title_contenders_points |>
+  filter(Driver == "Lando Norris") |>
+  mutate(Cumulative_points = cumsum(Points))
+
+cumulative_points_rus <- drivers_title_contenders_points |>
+  filter(Driver == "George Russell") |>
+  mutate(Cumulative_points = cumsum(Points))
+
+# Concatenate the cumulative points of the four target drivers
+cumulative_points <- rbind(cumulative_points_ver, cumulative_points_nor, cumulative_points_lec, cumulative_points_rus)
+
+# Tidying the data on the Grand Prix dates
+cumulative_points <- cumulative_points |>
+  arrange(GP_num, Driver)
+
+# Visualize the title contenders drivers trend
+drivers_trend <- ggplot(
+  cumulative_points, 
+  aes(x = GP_num, y = Cumulative_points, color = Driver)) +
+  geom_line(linewidth = 1.5) +
+  geom_point(size = 2.5) +
+  scale_color_manual(values = drivers_cols) +
+  transition_reveal(GP_num)  +
+  labs(
+    title = "Title contenders drivers trend",
+    x = "Number of races", y = "Cumulative points"
+  ) + 
+  scale_x_continuous(breaks = 1:9)
+
+animate(
+  drivers_trend,
+  renderer = av_renderer()
+)
+```
+
+## Title contenders constructors Trend Analysis
+
+Let's have a look also to the constructors results
+
+```{r constructors_title_contenders_trend, out.width="80%"}
+
+# Group the points based on teams
+constructors_title_contenders_points <- drivers_points |>
+  select(GP_num, Team, Points) |>
+  group_by(GP_num, Team) |>
+  summarise(Points = sum(Points),
+            .groups = "drop"
+            )
+
+# In this section we consider just the points of the four "top teams"
+constructors_title_contenders_points <- constructors_title_contenders_points |>
+  filter(Team == "Red Bull Racing Honda RBPT" | Team == "McLaren Mercedes" | Team == "Ferrari" | Team == "Mercedes")
+
+# Compute the cumulative points of target teams
+cumulative_points_rb <- constructors_title_contenders_points |>
+  filter(Team == "Red Bull Racing Honda RBPT") |>
+  mutate(Cumulative_points = cumsum(Points))
+
+cumulative_points_mcl <- constructors_title_contenders_points |>
+  filter(Team == "McLaren Mercedes") |>
+  mutate(Cumulative_points = cumsum(Points))
+
+cumulative_points_fer <- constructors_title_contenders_points |>
+  filter(Team == "Ferrari") |>
+  mutate(Cumulative_points = cumsum(Points))
+
+cumulative_points_mer <- constructors_title_contenders_points |>
+  filter(Team == "Mercedes") |>
+  mutate(Cumulative_points = cumsum(Points))
+
+# Concatenate the cumulative points of the four target drivers
+teams_cumulative_points <- rbind(cumulative_points_rb, cumulative_points_mcl, cumulative_points_fer, cumulative_points_mer)
+
+# Tidying the data on the Grand Prix dates
+teams_cumulative_points <- teams_cumulative_points |>
+  arrange(GP_num, Team)
+
+# Visualize the title contenders teams trend
+teams_trend <- ggplot(
+  teams_cumulative_points, 
+  aes(x = GP_num, y = Cumulative_points, color = Team)) +
+  geom_line(linewidth = 1.5) +
+  geom_point(size = 2.5) +
+  scale_color_manual(values = teams_cols) +
+  transition_reveal(GP_num) +
+  labs(
+    title = "Title contenders teams trend",
+    x = "Number of races", y = "Cumulative points"
+  ) + 
+  scale_x_continuous(breaks = 1:9)
+
+animate(
+  teams_trend,
+  renderer = av_renderer()
+)
+```
+
+# Part 2 <br> Spanish Grand Prix performances
+
+## Are qualifying sessions worth to be considered?
+
+There is a correlation between grid position and final race position?
+
+```{r qualifying_relevance, out.width="80%"}
+
+# Retrieve the final race position and the starting grid position 
+race_results <- race_results |>
+  select(Position, `Starting Grid`)
+
+sprint_results <- sprint_results |>
+  select(Position, `Starting Grid`)
+
+# Concatenate the data of classical races and sprint races
+results <- rbind(race_results, sprint_results)
+
+# Let's remove the non classified and disqualified drivers
+results <- results |>
+  filter(Position != "NC" & Position != "DQ")
+
+results$Position <- as.integer(results$Position)
+
+# Visualize a scatterplot to find a correlation between final position and starting position
+ggplot(
+  results,
+  aes(x = Position, y = `Starting Grid`)
+) +
+  geom_point() + 
+  geom_abline() 
+```
+
+Looks like there is a positive linear correlation between the starting position and the final position.
+To have a confirmation about that, let's compute the **Pearson correlation coefficient** $R$: 
+
+```{r pearson_coefficient}
+r_value = cor(results$Position, results$`Starting Grid`, , method = "pearson")
+```
+
+* $R$ = `r r_value`
+
+## Qualifying performances
+
+Performances of the last part of the qualifying session at **Spanish Grand Prix**
+
+```{r qualifying_performances, out.width="80%"}
+
+# Converting lap time from Char type to double
+q3_results <- q3_results |>
+  mutate(Time_ms = (60 + (as.double(str_split_i(Q3, ":", -1)))))
+
+# Visualize the qualifying lap time gap to the pole sitter
+ggplot(
+  q3_results,
+  aes(x = reorder(Driver, Time_ms), y = Time_ms - min(Time_ms), fill = Team)
+) + 
+  geom_bar(stat = "Identity", color = "black") +
+  geom_text(aes(label = round(Time_ms - min(Time_ms), digits = 3)), nudge_y = 0.03) +
+  scale_fill_manual(values = teams_cols) +
+  labs(
+    title = "Qualifying lap time",
+    x = "Drivers", y = "Delta to pole position (seconds)"
+  )
+```
+
+## Race lap times performances
+
+Let's visualize the lap times registered during the whole race by the title contenders drivers
+
+```{r race_lap_times_performances, out.width="75%"}
+
+# Starting from this chunk we will use the 2nd dataset related to spanish race data
+
+# In this section we consider just the points of the four "top teams" "number one" drivers (drivers that have more points compared to his teammate)
+title_contenders_spanish_lap_times <- race_lap_times |>
+  filter(driver == "Max Verstappen" | driver == "Lando Norris" | driver == "Charles Leclerc" | driver == "George Russell")
+
+# Visualize the line chart of the title contenders drivers lap times
+ggplot(
+  title_contenders_spanish_lap_times,
+  aes(x = lap, y = milliseconds, color = driver)
+) + 
+  geom_line() +
+  scale_color_manual(values = drivers_cols) +
+  labs(
+    title = "Title contenders drivers lap times",
+    x = "Lap number", y = "Lap time"
+  )
+```
+
+## Race lap times distribution
+
+Let's have a look also to the distribution of the lap times
+
+```{r race_lap_times_distribution, out.width="80%"}
+
+# Visualize the box plot of the title contenders drivers lap times
+ggplot(
+  title_contenders_spanish_lap_times,
+  aes(x = driver, y = milliseconds, color = driver)
+) + 
+  geom_boxplot(outlier.shape = NA) +
+  scale_color_manual(values = drivers_cols) +
+  coord_cartesian(ylim = c(77000, 84500)) +
+  labs(
+    title = "Title contenders drivers lap times distribution",
+    x = "Driver", y = "Lap time"
+  )
+```
+
+## Race gaps to the race winner
+
+The overall driver performance is obtained computing the final gaps respect to the race winner 
+
+```{r driver_overall_race_performace, out.width="75%"}
+
+# Computing the average lap times
+average_lap_times <- race_lap_times |>
+  group_by(driver, team) |>
+  summarise(
+    average_lap_time = mean(milliseconds),
+    .groups = "drop"
+  )
+
+# Visualize the final gaps respect to the race winner
+ggplot(
+  average_lap_times,
+  aes(x = average_lap_time - min(average_lap_time), y = reorder(driver, average_lap_time), fill = team)
+) + 
+  geom_bar(stat = "Identity", color = "black") +
+  scale_fill_manual(values = teams_cols) +
+  labs(
+    title = "Final gaps",
+    x = "Final gap to the race winner", y = "Driver"
+  )
+```
+
+It's possible to compute the mean between the average lap time of drivers who race for the same team, visualizing the average gaps respect to the fastest average lap times team
+
+```{r team_overall_race_performace, out.width="75%"}
+
+# Computing the mean of average lap times of drivers of the same team
+average_team_lap_times <- average_lap_times |>
+  group_by(team) |>
+  summarise(
+    average_lap_time = mean(average_lap_time)
+  )
+
+# Visualize the average gaps respect to the fastest average lap times team
+ggplot(
+  average_team_lap_times,
+  aes(x = average_lap_time - min(average_lap_time), y = reorder(team, average_lap_time), fill = team)
+) + 
+  geom_bar(stat = "Identity", color = "black", show.legend = FALSE) +
+  scale_fill_manual(values = teams_cols) +
+  labs(
+    title = "Average team lap times",
+    x = "Average team lap times", y = "Gap to the fastest average team"
+  )
+```
+
+## Spanish Grand Prix performance classes
+
+In conclusion, let's divide the drivers performances into classes using hierachical clustering
+
+```{r drivers_spanish_performances_classes, out.width="75%"}
+
+# Group drivers into performance classes 
+average_lap_times <- arrange(average_lap_times, average_lap_time)
+D = dist(average_lap_times$average_lap_time)
+cc = hclust(D, method = "average")
+
+# Visualize the driver ranking highlighting the performance classes with different colors
+clusters = cutree(cc, k = 6)
+average_lap_times = mutate(average_lap_times, cluster = as.factor(clusters))
+ggplot(average_lap_times, aes(x = 1, y = desc(average_lap_time), color = cluster)) +
+  geom_text(aes(label = driver), show.legend = FALSE) + 
+  labs(y = "Rating") +
+  theme_minimal() + 
+  theme(axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank())
+```
+
+The computation is repeated to divide teams into classes
+
+```{r teams_spanish_performances_classes, out.width="75%"}
+
+# Group teams into performance classes 
+average_team_lap_times <- arrange(average_team_lap_times, average_lap_time)
+D = dist(average_team_lap_times$average_lap_time)
+cc = hclust(D, method = "average")
+
+# Visualize the team ranking highlighting the performance classes with different colors
+clusters = cutree(cc, k = 4)
+average_team_lap_times = mutate(average_team_lap_times, cluster = as.factor(clusters))
+ggplot(average_team_lap_times, aes(x = 1, y = desc(average_lap_time), color = cluster)) +
+  geom_text(aes(label = team), show.legend = FALSE) + 
+  labs(y = "Rating") +
+  theme_minimal() + 
+  theme(axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank())
+```
+
