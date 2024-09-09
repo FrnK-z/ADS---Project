@@ -8,3 +8,5 @@ The file .r contains the R script used to create this project. <br>
 The file .css contains the .css file used to product the .html file. <br>
 The folder "Datasets" contains the datasets used in this project. <br>
 
+This project is done with R version 4.3.2 and package "tidyverse" version 2.0.0 and package "gganimate" 1.0.9.
+
